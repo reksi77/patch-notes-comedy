@@ -24,13 +24,29 @@ if (ENTRY.trim().length === 0 || ENTRY.includes("\n") || ENTRY.includes("\r")) {
   throw new Error("entry must be a single non-blank line");
 }
 
+// The judge requires a release-note shape: a version number like
+// vX.Y.Z followed by ": fixed a bug where ". Reject anything that
+// drifts out of that shape so a bad line can never reach the entry.
+if (!/^v\d+\.\d+\.\d+: fixed a bug where /.test(ENTRY)) {
+  throw new Error(
+    "entry must start with a version like vX.Y.Z followed by ': fixed a bug where '",
+  );
+}
+
 mkdirSync("/output", { recursive: true });
 writeFileSync("/output/entry.txt", ENTRY, "utf8");
 
-// Read it back and verify byte-for-byte equality.
-const written = readFileSync("/output/entry.txt", "utf8");
-if (written !== ENTRY) {
-  throw new Error("verification failed: /output/entry.txt does not match the entry");
+// Read it back and verify byte-for-byte equality at the byte level:
+// compare the written bytes against Buffer.from(ENTRY, "utf8") with
+// Buffer.equals, and also confirm there is no trailing newline (the
+// last byte must not be 0x0a), so a stray newline or encoding change
+// is caught even when a string comparison would silently pass it.
+const written = readFileSync("/output/entry.txt");
+if (!written.equals(Buffer.from(ENTRY, "utf8"))) {
+  throw new Error("verification failed: /output/entry.txt bytes do not match the entry");
+}
+if (written.length > 0 && written[written.length - 1] === 0x0a) {
+  throw new Error("verification failed: /output/entry.txt ends with a trailing newline");
 }
 
 console.log(`Wrote /output/entry.txt (${chars} characters)`);
